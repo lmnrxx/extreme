@@ -7,6 +7,6 @@
 
 ## how to use
 paste this in your roblox executor
-```loadstring(game:HttpGet("https://raw.githubusercontent.com/lmnrxx/extreme/refs/heads/main/script.lua"))()```
+```loadstring(game:HttpGet("https://tinyurl.com/34zczkdu"))()```
 
 **may not work on all executors
