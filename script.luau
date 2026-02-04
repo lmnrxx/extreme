@@ -1,7 +1,9 @@
 local Bracket = loadstring(game:HttpGet("https://raw.githubusercontent.com/AlexR32/Bracket/main/BracketV33.lua"))()
 local Sense = loadstring(game:HttpGet('https://sirius.menu/sense'))()
-local Players, UIS, RunService = game:GetService("Players"), game:GetService("UserInputService"), game:GetService("RunService")
+local Players, UIS, RunService, HttpService = game:GetService("Players"), game:GetService("UserInputService"), game:GetService("RunService"), game:GetService("HttpService")
+
 local lp, Camera = Players.LocalPlayer, workspace.CurrentCamera
+local CONFIG_FILE = "ExtremeConfig.json"
 
 Sense.teamSettings.enemy.enabled = true
 Sense.teamSettings.enemy.box = true
@@ -15,27 +17,78 @@ local window = Bracket:Window({
 	Position = UDim2.new(0.5, -250, 0.5, -250)
 })
 
--- MAIN TAB
+local aimbotEnabled, aiming = false, false
+local fovRadius = 150
+local fovEnabled = false
+local r, g, b = 255, 0, 0
+local speedValue, jumpValue = 16, 50
+local espEnabled = false
+local fovchangerEnabled = false
+local fovchangerValue = 70
+
+local function getConfig()
+	return {
+		aimbotEnabled = aimbotEnabled,
+		fovRadius = fovRadius,
+		fovEnabled = fovEnabled,
+		r = r,
+		g = g,
+		b = b,
+		speedValue = speedValue,
+		jumpValue = jumpValue,
+		espEnabled = espEnabled,
+		fovchangerEnabled = fovchangerEnabled,
+		fovchangerValue = fovchangerValue
+	}
+end
+
+local function applyConfig(cfg)
+	if not cfg then
+		return
+	end
+	aimbotEnabled = cfg.aimbotEnabled or false
+	fovRadius = cfg.fovRadius or 150
+	fovEnabled = cfg.fovEnabled ~= false
+	r, g, b = cfg.r or 255, cfg.g or 0, cfg.b or 0
+	speedValue = cfg.speedValue or 16
+	jumpValue = cfg.jumpValue or 50
+	espEnabled = cfg.espEnabled or false
+	fovchangerEnabled = cfg.fovchangerEnabled or false
+	fovchangerValue = cfg.fovchangerValue or 70
+	if espEnabled then
+		Sense.Load()
+	else
+		Sense.Unload()
+	end
+end
+
+local function saveConfig()
+	writefile(CONFIG_FILE, HttpService:JSONEncode(getConfig()))
+end
+
+local function loadConfig()
+	if isfile(CONFIG_FILE) then
+		applyConfig(HttpService:JSONDecode(readfile(CONFIG_FILE)))
+	end
+end
+
+local function deleteConfig()
+	if isfile(CONFIG_FILE) then
+		delfile(CONFIG_FILE)
+	end
+end
+
 local tabMain = window:Tab({
 	Name = "Main"
 })
-
--- AIMBOT SECTION
 local aimSection = tabMain:Section({
 	Name = "Aimbot"
 })
-local aimbotEnabled, aiming = false, false
-local fovRadius = 150
 
-local fovEnabled = true
-local r, g, b = 255, 0, 0
-local fovColor = Color3.fromRGB(r, g, b)
 local fovCircle = Drawing.new("Circle")
 fovCircle.Transparency = 0.5
 fovCircle.Thickness = 2
 fovCircle.Filled = false
-fovCircle.Visible = fovEnabled
-fovCircle.Color = fovColor
 
 local function getClosestHead()
 	local mousePos = UIS:GetMouseLocation()
@@ -46,7 +99,7 @@ local function getClosestHead()
 			if head then
 				local sp, onScreen = Camera:WorldToViewportPoint(head.Position)
 				if onScreen then
-					local delta = (Vector2.new(sp.X, sp.Y) - Vector2.new(mousePos.X, mousePos.Y)).Magnitude
+					local delta = (Vector2.new(sp.X, sp.Y) - mousePos).Magnitude
 					if delta < dist and delta <= fovRadius then
 						dist = delta
 						closest = head
@@ -58,13 +111,24 @@ local function getClosestHead()
 	return closest
 end
 
+local function getMouseTarget()
+	local ray = Camera:ScreenPointToRay(UIS:GetMouseLocation().X, UIS:GetMouseLocation().Y)
+	local params = RaycastParams.new()
+	params.FilterDescendantsInstances = {
+		lp.Character
+	}
+	params.FilterType = Enum.RaycastFilterType.Blacklist
+	local result = workspace:Raycast(ray.Origin, ray.Direction * 1000, params)
+	return result and result.Instance
+end
+
 RunService.RenderStepped:Connect(function()
 	local mp = UIS:GetMouseLocation()
 	if fovEnabled then
 		fovCircle.Visible = true
-		fovCircle.Position = Vector2.new(mp.X, mp.Y)
+		fovCircle.Position = mp
 		fovCircle.Radius = fovRadius
-		fovCircle.Color = fovColor
+		fovCircle.Color = Color3.fromRGB(r, g, b)
 	else
 		fovCircle.Visible = false
 	end
@@ -74,15 +138,25 @@ RunService.RenderStepped:Connect(function()
 			Camera.CFrame = CFrame.new(Camera.CFrame.Position, head.Position)
 		end
 	end
+	if triggerEnabled and aiming then
+		local target = getMouseTarget()
+		if target and target.Name == "Head" then
+			local hum = target:FindFirstAncestorOfClass("Model"):FindFirstChild("Humanoid")
+			if hum and hum.Health > 0 then
+				task.wait(triggerDelay / 1000)
+				mouse1click()
+			end
+		end
+	end
 end)
 
-UIS.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton2 then
+UIS.InputBegan:Connect(function(i)
+	if i.UserInputType == Enum.UserInputType.MouseButton2 then
 		aiming = true
 	end
 end)
-UIS.InputEnded:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton2 then
+UIS.InputEnded:Connect(function(i)
+	if i.UserInputType == Enum.UserInputType.MouseButton2 then
 		aiming = false
 	end
 end)
@@ -93,7 +167,12 @@ aimSection:Toggle({
 		aimbotEnabled = v
 	end
 })
-
+aimSection:Toggle({
+	Name = "Enable FOV Circle",
+	Callback = function(v)
+		fovEnabled = v
+	end
+})
 aimSection:Slider({
 	Name = "FOV",
 	Min = 10,
@@ -103,14 +182,6 @@ aimSection:Slider({
 		fovRadius = v
 	end
 })
-aimSection:Toggle({
-	Name = "Enable FOV Circle",
-	Callback = function(v)
-		fovEnabled = v
-	end
-})
-
--- RGB sliders
 aimSection:Slider({
 	Name = "FOV Color R",
 	Min = 0,
@@ -118,7 +189,6 @@ aimSection:Slider({
 	Value = r,
 	Callback = function(v)
 		r = v
-		fovColor = Color3.fromRGB(r, g, b)
 	end
 })
 aimSection:Slider({
@@ -128,7 +198,6 @@ aimSection:Slider({
 	Value = g,
 	Callback = function(v)
 		g = v
-		fovColor = Color3.fromRGB(r, g, b)
 	end
 })
 aimSection:Slider({
@@ -138,17 +207,16 @@ aimSection:Slider({
 	Value = b,
 	Callback = function(v)
 		b = v
-		fovColor = Color3.fromRGB(r, g, b)
 	end
 })
 
--- ESP SECTION
 local espSection = tabMain:Section({
 	Name = "ESP"
 })
 espSection:Toggle({
 	Name = "Enable ESP",
 	Callback = function(v)
+		espEnabled = v
 		if v then
 			Sense.Load()
 		else
@@ -157,11 +225,10 @@ espSection:Toggle({
 	end
 })
 
--- MOVEMENT SECTION
 local moveSection = tabMain:Section({
 	Name = "Movement"
 })
-local speedValue, jumpValue = 16, 50
+
 moveSection:Toggle({
 	Name = "Speed Hack",
 	Callback = function(v)
@@ -180,6 +247,7 @@ moveSection:Slider({
 		speedValue = v
 	end
 })
+
 moveSection:Toggle({
 	Name = "Jump Hack",
 	Callback = function(v)
@@ -199,23 +267,65 @@ moveSection:Slider({
 	end
 })
 
--- Toggle menu с клавишей K
-local toggleKey = Enum.KeyCode.K
-UIS.InputBegan:Connect(function(input, processed)
-	if processed then
-		return
-	end
-	if input.KeyCode == toggleKey then
-		window.Enabled = not window.Enabled
-	end
-end)
+local tabConfig = window:Tab({
+	Name = "Config"
+})
+local cfg = tabConfig:Section({
+	Name = "Configuration"
+})
+cfg:Button({
+	Name = "Save Config",
+	Callback = saveConfig
+})
+cfg:Button({
+	Name = "Load Config",
+	Callback = loadConfig
+})
+cfg:Button({
+	Name = "Delete Config",
+	Callback = deleteConfig
+})
 
--- INFO TAB
 local tabInfo = window:Tab({
 	Name = "Info"
 })
 tabInfo:Section({
 	Name = "About"
 }):Label({
-	Text = "press K to close the window"
+	Text = "Press K to close the window"
 })
+
+local misc = tabMain:Section({
+	Name = "Miscellaneous"
+})
+
+local function ChangeFov2(state)
+	if state == true then
+		workspace.CurrentCamera.FieldOfView = fovchangerValue
+	else
+		workspace.CurrentCamera.FieldOfView = 70
+	end
+end
+
+misc:Toggle({
+	Name = "Enable FOV Changer",
+	Callback = function(v)
+		fovchangerEnabled = v
+		ChangeFov2(fovchangerEnabled)
+	end
+})
+misc:Slider({
+	Name = "Fov Changer Value",
+	Min = 50,
+	Max = 150,
+	Value = fovchangerValue,
+	Callback = function(v)
+		fovchangerValue = v
+	end
+})
+
+UIS.InputBegan:Connect(function(i, p)
+	if not p and i.KeyCode == Enum.KeyCode.K then
+		window.Enabled = not window.Enabled
+	end
+end)
