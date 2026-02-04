@@ -4,4 +4,4 @@
 paste this in your roblox executor
 ```loadstring(game:HttpGet("https://raw.githubusercontent.com/escx01/extreme/refs/heads/main/script.luau"))()```
 
-roblox utility script
+**may not work on all executors
